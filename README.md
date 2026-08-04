@@ -65,7 +65,7 @@ Accuracy is reported as RMSE, MAE, out-of-sample R-squared, and QLIKE loss, whic
 ## Reproducing the results
 
 ```bash
-pip install numpy pandas scikit-learn statsmodels scipy matplotlib pysentiment2
+pip install -r requirements.txt
 python analysis.py
 python addendum.py
 python make_figs.py
