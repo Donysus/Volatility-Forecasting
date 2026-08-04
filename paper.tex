@@ -1,0 +1,251 @@
+\documentclass[10pt,twocolumn]{article}
+\usepackage[margin=0.75in,columnsep=0.28in]{geometry}
+\usepackage{mathptmx}
+\usepackage{graphicx}
+\usepackage{amsmath}
+\usepackage{booktabs}
+\usepackage{caption}
+\usepackage{microtype}
+\usepackage[hidelinks]{hyperref}
+\captionsetup{font=small,labelfont=bf,skip=4pt}
+\setlength{\parskip}{1pt}
+
+\title{\Large\bfseries How Much Does Each Modality Matter? An Empirical Study of Market, Macro-Financial, and Text Signals in Short-Horizon Equity Volatility Forecasting}
+\author{Raghav Jha\\ \normalsize Delhi Technological University, New Delhi, India}
+\date{}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+\noindent Multimodal machine learning is widely reported to improve financial forecasting, yet the incremental value of each modality is rarely quantified under a common, strictly out-of-sample protocol. This paper constructs a fully public multimodal dataset for the S\&P 500 covering January 2015 to July 2026 (2{,}879 trading days) that combines (i) a market modality built from daily open, high, low, close, and volume data, including Garman-Klass realized volatility and heterogeneous autoregressive terms, (ii) a macro-financial modality comprising the VIX, the ten-year Treasury yield, and the broad dollar index, and (iii) a text modality comprising the daily newspaper-based Economic Policy Uncertainty index and Loughran-McDonald tone extracted from 98 Federal Open Market Committee statements. Five model classes are evaluated on five-day-ahead realized volatility with expanding-window annual refits over 882 test days (January 2023 to July 2026). Adding macro-financial information to a heterogeneous autoregressive baseline raises out-of-sample $R^2$ from 0.299 to 0.369 and lowers the QLIKE loss by 12.4 percent, with gains concentrated in the turbulent 2025 episode, although Diebold-Mariano tests do not reject equal pooled accuracy at conventional levels. Text features add no incremental accuracy once implied volatility is included, and flexible nonlinear learners underperform regularized linear models at this sample size, with the widest neural specification significantly worse than the baseline. The evidence suggests that option-implied volatility already subsumes most policy-related text information at the daily horizon, and that in moderate-sample financial settings modality selection matters more than model complexity.
+\end{abstract}
+
+\vspace{2pt}
+\noindent\textbf{Keywords:} multimodal learning, volatility forecasting, realized volatility, HAR model, text mining, economic policy uncertainty, FOMC communication, machine learning
+
+\section{Introduction}
+Financial markets generate information in several distinct forms at once. Prices and volumes arrive continuously, macro-financial state variables such as implied volatility and interest rates summarize forward-looking risk perceptions, and a large stream of text, from newspapers to central bank statements, carries information about policy and the economic outlook. A growing literature argues that fusing these heterogeneous modalities improves predictive performance in finance \cite{sardelich2018,araci2019}. At the same time, a long-standing empirical tradition holds that market-based variables, in particular option-implied volatility, are highly efficient aggregators of public information \cite{whaley2000}. If that is true, much of the signal contained in slower text-based measures may already be embedded in market prices, and the marginal value of adding a text modality could be small.
+
+This paper asks a deliberately narrow question: given a standard forecasting task, short-horizon realized volatility of the S\&P 500, how much out-of-sample accuracy does each additional modality actually buy, and does the answer depend on the model class? The question is practical. Volatility forecasts feed directly into risk management, option pricing, and position sizing, and every additional data pipeline carries engineering and licensing cost. A modality is worth ingesting only if it improves forecasts beyond what cheaper inputs already deliver.
+
+The study makes four contributions. First, it assembles a fully reproducible multimodal dataset from public sources only: daily S\&P 500 open, high, low, close, and volume data; the VIX, the ten-year constant-maturity Treasury yield, and the broad dollar index from the Federal Reserve Economic Data service; the daily newspaper-based Economic Policy Uncertainty index of Baker, Bloom, and Davis \cite{baker2016}; and the full text of 98 Federal Open Market Committee (FOMC) statements published between January 2015 and June 2026, scored with the Loughran-McDonald financial dictionary \cite{loughran2011}. Second, it evaluates five model classes, ordinary least squares in the heterogeneous autoregressive (HAR) form, ridge regression, random forests, gradient boosting, and a multilayer perceptron, across three nested modality sets under an identical expanding-window protocol with annual refits and a genuinely out-of-sample test period of 882 trading days from January 2023 to July 2026. Third, it reports economically interpretable loss functions, including the QLIKE loss that is robust to noisy volatility proxies \cite{patton2011}, together with Diebold-Mariano tests of equal predictive accuracy \cite{diebold1995}. Fourth, it documents an honest and, we argue, useful pattern of results: the macro-financial modality delivers a moderate improvement that is concentrated in stress periods and does not reach conventional significance in pooled tests, the text modality is statistically and economically redundant once the VIX is present, and nonlinear learners do not repay their flexibility at this sample size.
+
+These findings cut against the framing, common in applied work, that more modalities and more flexible models are generically better. They are instead consistent with an information-subsumption view: text-derived policy signals matter for volatility, but their content reaches the forecaster faster and more cleanly through the options market than through the text itself.
+
+\section{Related Work}
+Volatility forecasting has a mature econometric core. The generalized autoregressive conditional heteroskedasticity model of Bollerslev \cite{bollerslev1986} and the heterogeneous autoregressive model of realized volatility of Corsi \cite{corsi2009} remain the standard baselines; the HAR model in particular is difficult to beat at daily and weekly horizons because volatility is strongly persistent across daily, weekly, and monthly components. Range-based estimators such as that of Garman and Klass \cite{garman1980} allow efficient measurement of daily variance from open, high, low, and close prices when intraday data are unavailable. Patton \cite{patton2011} shows that only certain loss functions, notably squared error and QLIKE, deliver consistent rankings of volatility forecasts when the evaluation proxy is itself noisy, which motivates our loss choices.
+
+A second strand studies text as a source of financial information. Tetlock \cite{tetlock2007} demonstrates that media pessimism predicts short-horizon returns and volume. Loughran and McDonald \cite{loughran2011} show that general-purpose sentiment dictionaries misclassify financial language and construct finance-specific word lists that have become the standard for lexicon scoring. Baker, Bloom, and Davis \cite{baker2016} build the newspaper-based Economic Policy Uncertainty (EPU) index and document its relation to volatility and investment. For central bank communication specifically, Hansen and McMahon \cite{hansen2016} measure the information in FOMC statements with computational linguistics and find that forward guidance shocks move market variables. More recent work applies pre-trained language models to financial text, for example the FinBERT model of Araci \cite{araci2019}.
+
+A third strand applies machine learning to prediction in finance. Gu, Kelly, and Xiu \cite{gu2020} provide large-scale evidence that regularized and tree-based learners \cite{breiman2001,friedman2001} improve return prediction in high-dimensional cross-sections. Closest to our setting, Sardelich and Manandhar \cite{sardelich2018} fuse news text and prices in deep architectures for one-day-ahead single-stock volatility and report gains over GARCH benchmarks. Our contribution relative to this literature is not a new architecture but a controlled accounting exercise: identical target, identical protocol, nested modality sets, and significance tests, so that the marginal value of each modality and of model flexibility can be read directly.
+
+\section{Data and Feature Construction}
+\subsection{Sources and sample}
+The sample covers January 28, 2015 to July 10, 2026, a total of 2{,}879 trading days after feature construction. All series are public. Daily S\&P 500 open, high, low, close, and volume data are obtained from the Yahoo Finance historical service. The VIX index, the ten-year constant-maturity Treasury yield, and the nominal broad dollar index are obtained from the Federal Reserve Economic Data (FRED) service and are forward-filled to the equity trading calendar. The daily EPU index is obtained from the public distribution maintained by its authors \cite{baker2016}. The 98 FOMC statements released between January 2015 and June 2026 are collected directly from the Federal Reserve press-release archive; the average statement contains roughly 430 words.
+
+\begin{figure*}[t]
+\centering
+\includegraphics[width=\textwidth]{fig1_modalities.png}
+\caption{The three modalities over the full sample. Top: S\&P 500 level with the daily Garman-Klass volatility estimate. Middle: VIX and the ten-year Treasury yield. Bottom: log daily Economic Policy Uncertainty with Loughran-McDonald polarity of each of the 98 FOMC statements. The 2020 pandemic shock and the 2025 volatility episode are visible in all modalities.}
+\label{fig:modalities}
+\end{figure*}
+
+\subsection{Market modality and target}
+Let $O_t, H_t, L_t, C_t$ denote daily open, high, low, and close. With $u_t=\ln H_t-\ln L_t$ and $c_t=\ln C_t-\ln O_t$, the Garman-Klass daily variance estimator \cite{garman1980} is
+\begin{equation}
+\hat\sigma^2_{t}=0.5\,u_t^2-(2\ln 2-1)\,c_t^2 ,
+\end{equation}
+which we annualize and express in percent, $RV_t=100\sqrt{252\,\hat\sigma^2_t}$. Following the HAR structure \cite{corsi2009} we form daily, weekly, and monthly components $RV^{(d)}_t=RV_t$, $RV^{(w)}_t=\tfrac{1}{5}\sum_{i=0}^{4}RV_{t-i}$, and $RV^{(m)}_t=\tfrac{1}{22}\sum_{i=0}^{21}RV_{t-i}$. The forecast target is average realized volatility over the next five sessions,
+\begin{equation}
+y_t=100\sqrt{252\cdot\tfrac{1}{5}\textstyle\sum_{i=1}^{5}\hat\sigma^2_{t+i}} .
+\end{equation}
+The market feature set additionally includes the daily log return in percent, its absolute value, five-day and 22-day price momentum, and a sixty-day volume z-score.
+
+\subsection{Macro-financial modality}
+The macro-financial block contains the VIX level and its five-day change, the ten-year yield level and its five-day change, and the five-day percent change of the broad dollar index. The VIX is the risk-neutral expectation of thirty-day S\&P 500 volatility and has long been interpreted as an investor fear gauge \cite{whaley2000}; its inclusion creates a demanding benchmark for any text signal, since option prices can impound news within minutes.
+
+\subsection{Text modality}
+Two text-derived series are used. The first is the log of the daily EPU index and its five-day mean; the index counts policy-uncertainty language in major United States newspapers and is available at a daily frequency \cite{baker2016}. The second is statement-level FOMC tone. Each statement is scored with the Loughran-McDonald dictionary \cite{loughran2011}: polarity is the difference between positive and negative word counts divided by their sum, and subjectivity is the share of tonal words in total words. We also include the log word count of the statement and the number of calendar days since the most recent statement. Because statements are released at 2 p.m.\ Eastern time on the meeting day and the target begins at $t+1$, assigning statement features from the release day forward introduces no look-ahead. All FRED series are lagged in the same release-aware manner through forward-filling.
+
+\begin{table}[t]
+\centering\small
+\caption{Summary statistics, January 2015 to July 2026 (2{,}879 daily observations). Volatility variables are annualized percent.}
+\label{tab:summ}
+\begin{tabular}{lrrrr}
+\toprule
+Variable & Mean & SD & Min & Max\\
+\midrule
+Daily log return (pct) & 0.05 & 1.12 & $-12.77$ & 9.09\\
+GK volatility $RV_t$ & 10.31 & 7.60 & 1.45 & 89.17\\
+Target $y_t$ & 10.87 & 6.77 & 2.37 & 73.96\\
+VIX & 18.37 & 7.03 & 9.14 & 82.69\\
+Ten-year yield (pct) & 2.72 & 1.16 & 0.52 & 4.98\\
+log daily EPU & 4.77 & 0.72 & 1.20 & 6.93\\
+FOMC polarity & 0.06 & 0.21 & $-0.40$ & 0.71\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Table \ref{tab:summ} reports summary statistics and Figure \ref{fig:modalities} plots the three modalities. The sample includes several distinct volatility regimes: the calm of 2017, the February 2018 and December 2018 spikes, the pandemic shock of March 2020, the 2022 tightening cycle, and a pronounced episode in the spring of 2025 during which daily Garman-Klass volatility briefly exceeded 80 percent annualized.
+
+\subsection{Nested feature sets}
+Three nested sets define the modality ablation. Set A (market only) contains the three HAR terms; extended market features enter from Set B onward together with the macro block. Set B (market plus macro) adds returns, absolute returns, momentum, the volume z-score, and the five macro-financial variables. Set C (full multimodal) adds the six text features. Set A therefore reproduces the classic HAR benchmark, and the A-to-B and B-to-C increments identify the marginal value of the macro-financial and text modalities respectively.
+
+\section{Methodology}
+\subsection{Models}
+Five model classes are estimated on each feature set: ordinary least squares (which on Set A is exactly the HAR regression), ridge regression with regularization strength 10 on standardized features, a random forest with 400 trees and a minimum leaf size of five \cite{breiman2001}, gradient boosting with 400 depth-three trees, learning rate 0.03, and 80 percent subsampling \cite{friedman2001}, and a multilayer perceptron with two hidden layers of 64 and 32 units, weight decay, and early stopping. Hyperparameters are held fixed across feature sets so that differences reflect information content rather than tuning effort.
+
+\begin{figure*}[t]
+\centering
+\includegraphics[width=0.92\textwidth]{fig2_pipeline.png}
+\caption{Study design. Three public-data modalities are aligned to the trading calendar with release-aware timing, fused into nested feature sets, and evaluated with expanding-window annual refits on five-day-ahead realized volatility.}
+\label{fig:pipeline}
+\end{figure*}
+
+\subsection{Evaluation protocol}
+Forecasts are produced with an expanding window and annual refits. For each test year $\tau\in\{2023,2024,2025,2026\}$ every model is trained on all observations dated before January 1 of year $\tau$ and generates forecasts for every day of year $\tau$; the earliest fit therefore uses eight full years of data (2015 to 2022) and the latest uses eleven. Pooling the four blocks yields 882 out-of-sample forecasts per model from January 2023 to early July 2026. No information dated on or after the forecast origin enters any transformation: scalers are fit on training data only, and all rolling features use trailing windows.
+
+\subsection{Loss functions and tests}
+Accuracy is measured by root mean squared error (RMSE), mean absolute error (MAE), out-of-sample $R^2$ computed against the test-sample mean, and the QLIKE loss
+\begin{equation}
+\mathrm{QLIKE}=\frac{1}{n}\sum_{t}\left(\frac{y_t^2}{\hat y_t^2}-\ln\frac{y_t^2}{\hat y_t^2}-1\right),
+\end{equation}
+which Patton \cite{patton2011} shows to be robust to noise in the volatility proxy and which penalizes under-prediction of variance more heavily, matching risk-management asymmetries. Equal predictive accuracy against the HAR baseline is tested with the Diebold-Mariano statistic \cite{diebold1995} on loss differentials $d_t=L_t(\mathrm{HAR})-L_t(\mathrm{alt})$, using a Newey-West long-run variance with four lags to account for the five-day forecast horizon; positive statistics favor the alternative model.
+
+\section{Results}
+\subsection{Main comparison}
+Table \ref{tab:main} reports the pooled out-of-sample results and Figure \ref{fig:ablation}(a) visualizes the $R^2$ ablation. Three patterns stand out.
+
+\begin{table}[t]
+\centering\small
+\caption{Pooled out-of-sample performance, 882 test days (January 2023 to July 2026). Target and errors in annualized volatility percent. Set A: market only (HAR terms). Set B: market plus macro-financial. Set C: full multimodal. Bold marks the best value in each column.}
+\label{tab:main}
+\begin{tabular}{llrrrr}
+\toprule
+Model & Set & RMSE & MAE & $R^2$ & QLIKE\\
+\midrule
+OLS (HAR) & A & 4.525 & 2.614 & 0.299 & 0.234\\
+OLS & B & 4.317 & 2.873 & 0.362 & 0.207\\
+OLS & C & 4.376 & 2.763 & 0.344 & 0.238\\
+\midrule
+Ridge & A & 4.521 & \textbf{2.612} & 0.300 & 0.233\\
+Ridge & B & \textbf{4.293} & 2.840 & \textbf{0.369} & \textbf{0.205}\\
+Ridge & C & 4.361 & 2.749 & 0.349 & 0.235\\
+\midrule
+Random forest & A & 4.961 & 2.892 & 0.157 & 0.258\\
+Random forest & B & 4.854 & 3.237 & 0.193 & 0.247\\
+Random forest & C & 4.784 & 3.122 & 0.216 & 0.247\\
+\midrule
+Grad.\ boosting & A & 4.994 & 2.769 & 0.146 & 0.237\\
+Grad.\ boosting & B & 4.805 & 3.275 & 0.209 & 0.258\\
+Grad.\ boosting & C & 4.993 & 3.361 & 0.146 & 0.272\\
+\midrule
+MLP & A & 4.647 & 2.653 & 0.261 & 0.242\\
+MLP & B & 4.815 & 3.430 & 0.206 & 0.281\\
+MLP & C & 5.897 & 4.300 & $-0.190$ & 0.383\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+First, the macro-financial modality helps, and it helps linear models most. Moving ridge regression from Set A to Set B raises out-of-sample $R^2$ from 0.300 to 0.369, cuts RMSE by 5.1 percent (4.521 to 4.293), and cuts QLIKE by 12.4 percent (0.233 to 0.205). The same A-to-B step improves OLS almost identically. The permutation-importance decomposition in Figure \ref{fig:ablation}(b) attributes most of this gain to a single variable: shuffling the VIX destroys about 0.25 of test $R^2$ in the full gradient-boosting model, an order of magnitude more than any other predictor. This is the expected footprint of an efficient forward-looking variance aggregator \cite{whaley2000}.
+
+Second, the text modality is redundant at this horizon. Moving from Set B to Set C leaves ridge regression slightly worse (R$^2$ 0.369 to 0.349, QLIKE 0.205 to 0.235) and the Diebold-Mariano test between the two forecast streams is far from rejection (statistic $-0.57$, $p=0.57$). Tree ensembles show a marginal improvement from text (random forest $R^2$ 0.193 to 0.216) that is small in absolute terms and does not close their gap to the linear models. In the importance ranking, all six text features sit at or below 0.007, indistinguishable from noise. Policy-related text evidently matters for volatility, the EPU and FOMC literatures document as much \cite{baker2016,hansen2016}, but its forecasting content appears to be subsumed by implied volatility by the time markets close.
+
+Third, flexibility does not pay at this sample size. With roughly 2{,}000 to 2{,}800 training observations and at most nineteen features, random forests, boosting, and the MLP all trail the two linear models on every pooled criterion, echoing the finding of Gu, Kelly, and Xiu \cite{gu2020} that the advantage of nonlinear learners grows with the breadth of the predictor set. The widest specification, the MLP on Set C, is the only model that is statistically distinguishable from the HAR baseline, and it is significantly worse.
+
+\begin{figure*}[t]
+\centering
+\includegraphics[width=\textwidth]{fig4_ablation.png}
+\caption{(a) Out-of-sample $R^2$ by model class and nested modality set. The macro-financial increment (A to B) is positive for the linear models; the text increment (B to C) is small or negative except for the random forest. (b) Permutation importance in the full-set gradient-boosting model: the VIX dominates all other predictors and every text feature is near zero.}
+\label{fig:ablation}
+\end{figure*}
+
+\subsection{Statistical significance}
+Table \ref{tab:dm} reports Diebold-Mariano tests against the HAR baseline. The headline multimodal improvement, ridge on Set B, has a positive but insignificant statistic under squared-error loss (0.83, $p=0.40$) and under QLIKE (1.44, $p=0.15$). Given 882 test days and the extreme dispersion of volatility outcomes, the tests are simply not powerful enough to certify a gain of this size, and we report that plainly rather than leaning on the pooled point estimates. By contrast, the negative results are decisive: gradient boosting on the full set is significantly worse than HAR ($-2.41$, $p=0.016$) and the full-set MLP is rejected at any conventional level ($-5.65$, $p<0.001$). The asymmetry is itself informative. In this setting the data can prove that complexity hurts more easily than they can prove that an extra modality helps.
+
+\begin{table}[t]
+\centering\small
+\caption{Diebold-Mariano tests of equal predictive accuracy against the HAR baseline (positive statistics favor the alternative model). Squared-error loss unless noted; Newey-West variance with four lags.}
+\label{tab:dm}
+\begin{tabular}{lrr}
+\toprule
+Comparison & DM stat. & $p$-value\\
+\midrule
+Ridge B vs HAR & 0.83 & 0.404\\
+Ridge B vs HAR (QLIKE loss) & 1.44 & 0.150\\
+Ridge C vs HAR & 0.74 & 0.458\\
+Ridge C vs Ridge B (text increment) & $-0.57$ & 0.571\\
+Random forest C vs HAR & $-1.76$ & 0.079\\
+Grad.\ boosting C vs HAR & $-2.41$ & 0.016\\
+MLP C vs HAR & $-5.65$ & $<0.001$\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Where the gains live}
+Figure \ref{fig:forecasts} plots the test period. The ridge market-plus-macro model tracks the sharp 2025 volatility episode visibly better than HAR, rising earlier and higher as the VIX repriced, while in the calm of 2023 it carries a small upward level bias that HAR avoids. This is also why the multimodal model improves RMSE and QLIKE, which weight large errors and under-prediction heavily, while slightly worsening MAE (2.840 versus 2.614): the macro block buys protection in the tails at the cost of a modest premium in quiet times, a trade most risk managers would accept.
+
+\begin{figure*}[t]
+\centering
+\includegraphics[width=\textwidth]{fig3_forecasts.png}
+\caption{Out-of-sample five-day-ahead volatility forecasts, January 2023 to July 2026. The market-plus-macro ridge model responds faster and more fully to the 2025 stress episode than the HAR baseline, and runs slightly rich in the calm 2023 regime.}
+\label{fig:forecasts}
+\end{figure*}
+
+\section{Robustness Across Years}
+Table \ref{tab:yearly} splits the test period by calendar year. The pattern is regime-dependent in exactly the direction the pooled decomposition suggests. In the low-volatility year 2023 HAR is the better forecaster on both losses. From 2024 onward the multimodal model wins on QLIKE every year, with the largest margin in 2025 (0.285 versus 0.362), the year containing the sharp spring drawdown, where it also dominates on RMSE (6.09 versus 6.97). The partial year 2026 produces negative within-year $R^2$ for both models, a reminder that within-regime $R^2$ against a local mean is a harsh yardstick when the level of volatility shifts; even there the multimodal model has the smaller errors. We conclude that the macro-financial modality functions as stress insurance rather than as an all-weather enhancement.
+
+\begin{table}[t]
+\centering\small
+\caption{Out-of-sample performance by test year: HAR baseline versus ridge on the market-plus-macro set.}
+\label{tab:yearly}
+\begin{tabular}{lrrrrr}
+\toprule
+ & & \multicolumn{2}{c}{RMSE} & \multicolumn{2}{c}{QLIKE}\\
+\cmidrule(lr){3-4}\cmidrule(lr){5-6}
+Year & $n$ & HAR & Ridge B & HAR & Ridge B\\
+\midrule
+2023 & 250 & \textbf{2.59} & 3.14 & \textbf{0.110} & 0.144\\
+2024 & 252 & \textbf{3.21} & 3.42 & 0.219 & \textbf{0.193}\\
+2025 & 250 & 6.97 & \textbf{6.09} & 0.362 & \textbf{0.285}\\
+2026 (to July) & 130 & 3.58 & \textbf{3.47} & 0.251 & \textbf{0.188}\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\section{Discussion}
+The results admit a coherent economic reading. Implied volatility is a price, set continuously by agents whose profits depend on impounding all available information about future variance, including whatever newspapers and the FOMC will say. Lexicon tone extracted from eight statements a year, or a daily count of uncertainty language in newsprint, is a slower and coarser measurement of largely the same underlying object. When both are offered to a forecasting model, the model takes the price. This subsumption logic explains why the text modality shows near-zero marginal importance here while the same text measures carry robust explanatory power in settings where implied volatility is excluded or where the object of interest is a policy shock rather than a forecast \cite{baker2016,hansen2016,tetlock2007}.
+
+The failure of the nonlinear learners is equally instructive and consistent with prior evidence. Volatility persistence is well captured by a three-term linear structure \cite{corsi2009}; the incremental signal from the macro block is also close to linear in logs. With under three thousand training observations, the variance cost of trees and networks exceeds their bias savings, and the deepest model overfits severely once handed the noisiest features. Practitioners with similar data budgets should read the modality ablation, not the model leaderboard, as the actionable output: spend the next engineering hour on acquiring implied-volatility data, not on architecture search or news pipelines.
+
+Two caveats sharpen the interpretation. The improvement from the macro block, while economically meaningful on QLIKE and concentrated exactly where it is most valuable, is not statistically significant in pooled two-sided tests; a longer test window or intraday realized measures would raise power. And our text representation is deliberately simple. Transformer embeddings of the same statements \cite{araci2019}, or intraday alignment of news timestamps, could in principle recover text signal that the VIX has not yet absorbed at the daily close; our claim is about lexicon-scored daily text, not about text in general.
+
+\section{Limitations}
+The study covers a single index in a single market, so the external validity of the subsumption result for less option-complete markets, including many emerging markets, is untested and is a natural extension. The realized-volatility target and its Garman-Klass measurement rest on daily ranges rather than intraday returns, which adds proxy noise, although QLIKE is designed to rank forecasts consistently under exactly this condition \cite{patton2011}. Hyperparameters were fixed rather than tuned per window, which is conservative and symmetric across modality sets but may understate the ceiling of the flexible models. FOMC tone is scored at the statement level without separating economic-conditions language from forward guidance, a distinction Hansen and McMahon \cite{hansen2016} show to matter. Finally, no trading strategy or transaction-cost analysis is attempted; the object of study is forecast accuracy, not portfolio profitability, and nothing here constitutes investment advice.
+
+\section{Conclusion}
+Using only public data, a common target, and a strict expanding-window protocol, this paper quantifies the marginal forecasting value of three information modalities for short-horizon S\&P 500 volatility. Market history alone reproduces the strong HAR benchmark; adding macro-financial variables, dominated by the VIX, lifts out-of-sample $R^2$ from 0.30 to 0.37 and cuts QLIKE by about an eighth, with the gains concentrated in the 2025 stress episode but falling short of pooled statistical significance; adding lexicon-scored text on top contributes nothing measurable; and flexible nonlinear models underperform regularized linear ones throughout, significantly so for the widest specification. For daily-frequency volatility work with moderate samples, the evidence favors careful modality selection over model complexity, and it identifies option-implied volatility as the modality that subsumes the rest.
+
+\section*{Data Availability}
+All inputs are public: S\&P 500 daily price and volume history (Yahoo Finance), the VIX, ten-year Treasury yield, and broad dollar index (Federal Reserve Economic Data), the daily Economic Policy Uncertainty index (Baker, Bloom, and Davis public distribution), and FOMC statements (Federal Reserve press-release archive). The full feature dataset and code sufficient to reproduce every number and figure are available from the author on request.
+
+\begin{thebibliography}{99}\small
+\bibitem{corsi2009} F.\ Corsi, ``A simple approximate long-memory model of realized volatility,'' Journal of Financial Econometrics, vol.\ 7, no.\ 2, pp.\ 174--196, 2009.
+\bibitem{bollerslev1986} T.\ Bollerslev, ``Generalized autoregressive conditional heteroskedasticity,'' Journal of Econometrics, vol.\ 31, no.\ 3, pp.\ 307--327, 1986.
+\bibitem{garman1980} M.\ B.\ Garman and M.\ J.\ Klass, ``On the estimation of security price volatilities from historical data,'' Journal of Business, vol.\ 53, no.\ 1, pp.\ 67--78, 1980.
+\bibitem{loughran2011} T.\ Loughran and B.\ McDonald, ``When is a liability not a liability? Textual analysis, dictionaries, and 10-Ks,'' Journal of Finance, vol.\ 66, no.\ 1, pp.\ 35--65, 2011.
+\bibitem{tetlock2007} P.\ C.\ Tetlock, ``Giving content to investor sentiment: The role of media in the stock market,'' Journal of Finance, vol.\ 62, no.\ 3, pp.\ 1139--1168, 2007.
+\bibitem{baker2016} S.\ R.\ Baker, N.\ Bloom, and S.\ J.\ Davis, ``Measuring economic policy uncertainty,'' Quarterly Journal of Economics, vol.\ 131, no.\ 4, pp.\ 1593--1636, 2016.
+\bibitem{hansen2016} S.\ Hansen and M.\ McMahon, ``Shocking language: Understanding the macroeconomic effects of central bank communication,'' Journal of International Economics, vol.\ 99, pp.\ S114--S133, 2016.
+\bibitem{araci2019} D.\ Araci, ``FinBERT: Financial sentiment analysis with pre-trained language models,'' arXiv preprint arXiv:1908.10063, 2019.
+\bibitem{sardelich2018} M.\ Sardelich and S.\ Manandhar, ``Multimodal deep learning for short-term stock volatility prediction,'' arXiv preprint arXiv:1812.10479, 2018.
+\bibitem{gu2020} S.\ Gu, B.\ Kelly, and D.\ Xiu, ``Empirical asset pricing via machine learning,'' Review of Financial Studies, vol.\ 33, no.\ 5, pp.\ 2223--2273, 2020.
+\bibitem{patton2011} A.\ J.\ Patton, ``Volatility forecast comparison using imperfect volatility proxies,'' Journal of Econometrics, vol.\ 160, no.\ 1, pp.\ 246--256, 2011.
+\bibitem{diebold1995} F.\ X.\ Diebold and R.\ S.\ Mariano, ``Comparing predictive accuracy,'' Journal of Business and Economic Statistics, vol.\ 13, no.\ 3, pp.\ 253--263, 1995.
+\bibitem{breiman2001} L.\ Breiman, ``Random forests,'' Machine Learning, vol.\ 45, no.\ 1, pp.\ 5--32, 2001.
+\bibitem{friedman2001} J.\ H.\ Friedman, ``Greedy function approximation: A gradient boosting machine,'' Annals of Statistics, vol.\ 29, no.\ 5, pp.\ 1189--1232, 2001.
+\bibitem{whaley2000} R.\ E.\ Whaley, ``The investor fear gauge,'' Journal of Portfolio Management, vol.\ 26, no.\ 3, pp.\ 12--17, 2000.
+\end{thebibliography}
+
+\end{document}
